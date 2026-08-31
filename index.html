@@ -48,11 +48,6 @@
     transition:border-color .2s,color .2s}
   .daynight:hover{border-color:var(--cyan);color:var(--cyan)}
   @media(max-width:760px){.daynight{top:82px;right:20px}}
-  #cineBlack{position:fixed;inset:0;background:#05060C;opacity:0;z-index:9000;pointer-events:none;transition:opacity .6s ease}
-  #cineBlack.on{opacity:1;pointer-events:auto;cursor:pointer}
-  #cineFlash{position:fixed;inset:0;background:#e6ffee;opacity:0;z-index:9600;pointer-events:none}
-  .space-canvas.cine-full{position:fixed;inset:0;width:100vw;height:100vh;z-index:9500}
-  body.cine{overflow:hidden}
   .hero .wrap{width:100%;pointer-events:none}
   .hero-content{max-width:600px;position:relative;z-index:3;pointer-events:auto}
   h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(2.7rem,7vw,5rem);
@@ -122,8 +117,6 @@
 <body>
 
 <div class="stars" aria-hidden="true"><i class="s1" id="star1"></i><i class="s2" id="star2"></i><i class="s3" id="star3"></i></div>
-<div id="cineBlack" aria-hidden="true"></div>
-<div id="cineFlash" aria-hidden="true"></div>
 
 <nav><div class="wrap">
   <span class="brand">Joseph Freiman</span>
@@ -301,7 +294,6 @@
   scene.add(starfield);
 
   function layout(){
-    if(mode==='cinematic'){ renderer.setSize(innerWidth,innerHeight,false); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); return; }
     var w=hero.clientWidth,h=hero.clientHeight;
     renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
     var halfH=Math.tan(camera.fov*Math.PI/360)*camera.position.z, halfW=halfH*camera.aspect;
@@ -315,8 +307,23 @@
   var dayMode=true, btn=document.getElementById('dayToggle');
   if(btn){ btn.addEventListener('click',function(){ dayMode=!dayMode; tgtSun=(dayMode?daySun:nightSun).clone(); btn.textContent=dayMode?'☀ Day':'☾ Night'; }); }
 
+  /* ---- drag to spin the Earth ---- */
+  var dragging=false, lastX=0, lastY=0, vel=0, velY=0;
+  var ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+  function setNdc(e){ var r=canvas.getBoundingClientRect(); ndc.x=((e.clientX-r.left)/r.width)*2-1; ndc.y=-((e.clientY-r.top)/r.height)*2+1; }
+  function overEarth(){ ray.setFromCamera(ndc,camera); return ray.intersectObject(earth,true).length>0; }
+  canvas.addEventListener('pointerdown',function(e){ setNdc(e);
+    if(overEarth()){ dragging=true; lastX=e.clientX; lastY=e.clientY; vel=0; velY=0; canvas.style.cursor='grabbing'; try{canvas.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } });
+  canvas.addEventListener('pointermove',function(e){ setNdc(e);
+    if(dragging){ var dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; vel=dx*0.006; velY=dy*0.004;
+      earth.rotation.y+=vel; earth.rotation.x=Math.max(-0.8,Math.min(0.8,earth.rotation.x+velY)); }
+    else { canvas.style.cursor=overEarth()?'grab':'default'; } });
+  function endDrag(){ if(dragging){ dragging=false; canvas.style.cursor='grab'; } }
+  canvas.addEventListener('pointerup',endDrag); canvas.addEventListener('pointercancel',endDrag); canvas.addEventListener('pointerleave',endDrag);
+
   function tick(){
-    if(!reduce){ earth.rotation.y+=0.0009; starfield.rotation.y+=0.0002; }
+    if(!dragging && !reduce){ earth.rotation.y+=0.0009+vel; earth.rotation.x+=velY; vel*=0.95; velY*=0.9; earth.rotation.x=Math.max(-0.8,Math.min(0.8,earth.rotation.x)); }
+    starfield.rotation.y+=reduce?0:0.0002;
     curSun.lerp(tgtSun,0.05); uniforms.sunDir.value.copy(curSun);
     renderer.render(scene,camera);
     requestAnimationFrame(tick);
